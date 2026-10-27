@@ -43,7 +43,7 @@ def blobMedia():
 
     extensao = Path(nome_original).suffix.lower()
     nome = f"{uuid.uuid4().hex}{extensao}"
-    caminho = f"{PREFIXO}"
+    caminho = f"{PREFIXO}/{nome}"
 
     try:
         conteudo = arquivo.read()
