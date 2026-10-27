@@ -7,7 +7,7 @@ import uuid
 
 app = Flask(__name__)
 
-PASTA = Path("medias")
+PASTA = Path("tmp/medias")
 PASTA.mkdir(exist_ok=True)
 
 @app.route("/enviarMedia", methods=["POST"])
