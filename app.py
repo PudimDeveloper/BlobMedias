@@ -1,70 +1,117 @@
-from flask import Flask, request, jsonify, send_from_directory
+
+from flask import Flask, request, jsonify, redirect
 from pathlib import Path
 from werkzeug.utils import secure_filename
+from vercel.blob import sync as blob
+import mimetypes
 import uuid
 
 app = Flask(__name__)
 
-PASTA = Path("/tmp") / "medias"
-PASTA.mkdir(parents=True, exist_ok=True)
+PREFIXO = "medias/"
 
 
 @app.route("/enviarMedia", methods=["POST"])
 def blobMedia():
     arquivo = request.files.get("blob")
 
-    if not arquivo:
+    if not arquivo or not arquivo.filename:
         return jsonify({
             "ok": False,
             "error": "Nenhum arquivo enviado"
         }), 400
 
-    nome_original = secure_filename(arquivo.filename or "media.bin")
-    extensao = Path(nome_original).suffix
+    nome_original = secure_filename(arquivo.filename)
+    extensao = Path(nome_original).suffix.lower()
     nome = f"{uuid.uuid4().hex}{extensao}"
+    caminho = f"{PREFIXO}{nome}"
 
-    caminho = PASTA / nome
-    arquivo.save(caminho)
+    try:
+        conteudo = arquivo.read()
 
-    return jsonify({
-        "ok": True,
-        "url": f"/viewMedias/{nome}"
-    })
+        resultado = blob.put_blob(
+            caminho,
+            conteudo,
+            access="public",
+            content_type=(
+                arquivo.mimetype
+                or mimetypes.guess_type(nome)[0]
+                or "application/octet-stream"
+            )
+        )
+
+        return jsonify({
+            "ok": True,
+            "nome": nome,
+            "url": f"/viewMedias/{nome}",
+            "blobUrl": resultado.url
+        }), 201
+
+    except Exception:
+        app.logger.exception("Erro ao enviar mídia")
+        return jsonify({
+            "ok": False,
+            "error": "Falha ao armazenar a mídia"
+        }), 500
 
 
 @app.route("/viewMedias", methods=["GET"])
 def viewMedias():
-    if not PASTA.exists():
-        return jsonify([])
+    try:
+        arquivos = []
 
-    arquivos = [
-        {
-            "nome": arquivo.name,
-            "url": f"/viewMedias/{arquivo.name}"
-        }
-        for arquivo in sorted(PASTA.iterdir(), key=lambda item: item.name)
-        if arquivo.is_file()
-    ]
+        for item in blob.query_blobs(prefix=PREFIXO):
+            nome = item.pathname.removeprefix(PREFIXO)
 
-    return jsonify(arquivos)
+            arquivos.append({
+                "nome": nome,
+                "url": f"/viewMedias/{nome}",
+                "blobUrl": item.url
+            })
+
+        arquivos.sort(key=lambda item: item["nome"])
+        return jsonify(arquivos)
+
+    except Exception:
+        app.logger.exception("Erro ao listar mídias")
+        return jsonify({
+            "ok": False,
+            "error": "Falha ao listar mídias"
+        }), 500
 
 
 @app.route("/viewMedias/<nome>", methods=["GET"])
 def viewMedia(nome):
-    return send_from_directory(PASTA, nome)
+    nome = secure_filename(nome)
+
+    if not nome:
+        return jsonify({
+            "ok": False,
+            "error": "Nome inválido"
+        }), 400
+
+    caminho = f"{PREFIXO}{nome}"
+
+    try:
+        resultado = blob.head_blob(caminho)
+        return redirect(resultado.url, code=302)
+
+    except Exception:
+        app.logger.exception("Erro ao localizar mídia")
+        return jsonify({
+            "ok": False,
+            "error": "Mídia não encontrada"
+        }), 404
 
 
 @app.route("/")
 def home():
-    return {
-        "message": "Olá! Api está funcionando!",
+    return jsonify({
+        "message": "Olá! API está funcionando!",
         "status": 200,
         "params": [
             "/viewMedias",
-            "/enviarMedia"
+            "/enviarMedia",
+            "/viewMedias/<nome>"
         ]
-    }
-
-
-if __name__ == "__main__":
-    app.run(debug=True)
+    })
