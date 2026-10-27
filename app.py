@@ -5,7 +5,7 @@ import uuid
 
 app = Flask(__name__)
 
-PASTA = Path("/tmp") / "medias"
+PASTA = Path("/medias")
 PASTA.mkdir(parents=True, exist_ok=True)
 
 
