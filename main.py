@@ -48,9 +48,4 @@ def viewMedias():
 def viewMedia(nome):
     return send_from_directory(PASTA, nome)
 
-if __name__ == "__main__":
-    app.run(
-        host="0.0.0.0",
-        port=int(os.getenv("PORT", 5000))
-    )
 
