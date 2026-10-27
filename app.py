@@ -1,11 +1,12 @@
-from flask import Flask, request, jsonify, redirect
+from flask import Flask, request, jsonify, Response
 from werkzeug.utils import secure_filename
 from vercel.blob import sync as blob
 from pathlib import Path
+from urllib.request import urlopen
+from urllib.error import HTTPError, URLError
 import mimetypes
 import traceback
 import uuid
-import os
 
 app = Flask(__name__)
 
@@ -13,8 +14,13 @@ PREFIXO = "medias/"
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
 
 
-def resposta_erro(mensagem, erro, status=500):
-    app.logger.exception(mensagem)
+def erro_json(mensagem, erro, status=500):
+    app.logger.error(
+        "%s: %s\n%s",
+        mensagem,
+        erro,
+        traceback.format_exc()
+    )
 
     return jsonify({
         "ok": False,
@@ -60,13 +66,6 @@ def blobMedia():
             or "application/octet-stream"
         )
 
-        app.logger.info(
-            "Enviando mídia: nome=%s, tamanho=%d, tipo=%s",
-            nome,
-            len(conteudo),
-            tipo
-        )
-
         resultado = blob.put_blob(
             caminho,
             conteudo,
@@ -74,26 +73,15 @@ def blobMedia():
             content_type=tipo
         )
 
-        url_blob = resultado.url
-
         return jsonify({
             "ok": True,
             "nome": nome,
             "url": f"/viewMedias/{nome}",
-            "blobUrl": url_blob
+            "blobUrl": resultado.url
         }), 201
 
     except Exception as erro:
-        app.logger.error(
-            "Falha ao enviar mídia:\n%s",
-            traceback.format_exc()
-        )
-
-        return jsonify({
-            "ok": False,
-            "error": str(erro),
-            "tipo": type(erro).__name__
-        }), 500
+        return erro_json("Falha ao enviar mídia", erro)
 
 
 @app.route("/viewMedias", methods=["GET"])
@@ -115,16 +103,7 @@ def viewMedias():
         return jsonify(arquivos), 200
 
     except Exception as erro:
-        app.logger.error(
-            "Falha ao listar mídias:\n%s",
-            traceback.format_exc()
-        )
-
-        return jsonify({
-            "ok": False,
-            "error": str(erro),
-            "tipo": type(erro).__name__
-        }), 500
+        return erro_json("Falha ao listar mídias", erro)
 
 
 @app.route("/viewMedias/<nome>", methods=["GET"])
@@ -141,21 +120,40 @@ def viewMedia(nome):
 
     try:
         resultado = blob.head_blob(caminho)
+        url_blob = resultado.url
 
-        return redirect(resultado.url, code=302)
+        with urlopen(url_blob, timeout=20) as resposta:
+            conteudo = resposta.read()
+            tipo = resposta.headers.get(
+                "Content-Type",
+                mimetypes.guess_type(nome_seguro)[0]
+                or "application/octet-stream"
+            )
+
+        response = Response(conteudo, status=200)
+        response.headers["Content-Type"] = tipo
+        response.headers["Content-Disposition"] = (
+            f'inline; filename="{nome_seguro}"'
+        )
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Cache-Control"] = "public, max-age=3600"
+
+        return response
+
+    except HTTPError as erro:
+        if erro.code == 404:
+            return jsonify({
+                "ok": False,
+                "error": "Mídia não encontrada"
+            }), 404
+
+        return erro_json("Erro HTTP ao buscar mídia no Blob", erro, 502)
+
+    except (URLError, TimeoutError) as erro:
+        return erro_json("Falha ao acessar a URL da mídia", erro, 502)
 
     except Exception as erro:
-        app.logger.error(
-            "Falha ao localizar mídia %s:\n%s",
-            nome_seguro,
-            traceback.format_exc()
-        )
-
-        return jsonify({
-            "ok": False,
-            "error": str(erro),
-            "tipo": type(erro).__name__
-        }), 404
+        return erro_json("Falha ao exibir mídia", erro)
 
 
 @app.route("/", methods=["GET"])
@@ -185,4 +183,3 @@ def erro_interno(_erro):
         "ok": False,
         "error": "Erro interno da API"
     }), 500
-    
