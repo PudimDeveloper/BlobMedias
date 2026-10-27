@@ -49,9 +49,11 @@ def blobMedia():
 
     except Exception:
         app.logger.exception("Erro ao enviar mídia")
+        
         return jsonify({
             "ok": False,
-            "error": "Falha ao armazenar a mídia"
+            "error": str(erro),
+            "tipo": type(erro).__name__
         }), 500
 
 
