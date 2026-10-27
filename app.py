@@ -1,14 +1,26 @@
-
 from flask import Flask, request, jsonify, redirect
-from pathlib import Path
 from werkzeug.utils import secure_filename
 from vercel.blob import sync as blob
+from pathlib import Path
 import mimetypes
+import traceback
 import uuid
+import os
 
 app = Flask(__name__)
 
 PREFIXO = "medias/"
+app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
+
+
+def resposta_erro(mensagem, erro, status=500):
+    app.logger.exception(mensagem)
+
+    return jsonify({
+        "ok": False,
+        "error": str(erro),
+        "tipo": type(erro).__name__
+    }), status
 
 
 @app.route("/enviarMedia", methods=["POST"])
@@ -22,6 +34,13 @@ def blobMedia():
         }), 400
 
     nome_original = secure_filename(arquivo.filename)
+
+    if not nome_original:
+        return jsonify({
+            "ok": False,
+            "error": "Nome de arquivo inválido"
+        }), 400
+
     extensao = Path(nome_original).suffix.lower()
     nome = f"{uuid.uuid4().hex}{extensao}"
     caminho = f"{PREFIXO}{nome}"
@@ -29,27 +48,47 @@ def blobMedia():
     try:
         conteudo = arquivo.read()
 
+        if not conteudo:
+            return jsonify({
+                "ok": False,
+                "error": "O arquivo está vazio"
+            }), 400
+
+        tipo = (
+            arquivo.mimetype
+            or mimetypes.guess_type(nome_original)[0]
+            or "application/octet-stream"
+        )
+
+        app.logger.info(
+            "Enviando mídia: nome=%s, tamanho=%d, tipo=%s",
+            nome,
+            len(conteudo),
+            tipo
+        )
+
         resultado = blob.put_blob(
             caminho,
             conteudo,
             access="public",
-            content_type=(
-                arquivo.mimetype
-                or mimetypes.guess_type(nome)[0]
-                or "application/octet-stream"
-            )
+            content_type=tipo
         )
+
+        url_blob = resultado.url
 
         return jsonify({
             "ok": True,
             "nome": nome,
             "url": f"/viewMedias/{nome}",
-            "blobUrl": resultado.url
+            "blobUrl": url_blob
         }), 201
 
-    except Exception:
-        app.logger.exception("Erro ao enviar mídia")
-        
+    except Exception as erro:
+        app.logger.error(
+            "Falha ao enviar mídia:\n%s",
+            traceback.format_exc()
+        )
+
         return jsonify({
             "ok": False,
             "error": str(erro),
@@ -72,41 +111,54 @@ def viewMedias():
             })
 
         arquivos.sort(key=lambda item: item["nome"])
-        return jsonify(arquivos)
 
-    except Exception:
-        app.logger.exception("Erro ao listar mídias")
+        return jsonify(arquivos), 200
+
+    except Exception as erro:
+        app.logger.error(
+            "Falha ao listar mídias:\n%s",
+            traceback.format_exc()
+        )
+
         return jsonify({
             "ok": False,
-            "error": "Falha ao listar mídias"
+            "error": str(erro),
+            "tipo": type(erro).__name__
         }), 500
 
 
 @app.route("/viewMedias/<nome>", methods=["GET"])
 def viewMedia(nome):
-    nome = secure_filename(nome)
+    nome_seguro = secure_filename(nome)
 
-    if not nome:
+    if not nome_seguro or nome_seguro != nome:
         return jsonify({
             "ok": False,
             "error": "Nome inválido"
         }), 400
 
-    caminho = f"{PREFIXO}{nome}"
+    caminho = f"{PREFIXO}{nome_seguro}"
 
     try:
         resultado = blob.head_blob(caminho)
+
         return redirect(resultado.url, code=302)
 
-    except Exception:
-        app.logger.exception("Erro ao localizar mídia")
+    except Exception as erro:
+        app.logger.error(
+            "Falha ao localizar mídia %s:\n%s",
+            nome_seguro,
+            traceback.format_exc()
+        )
+
         return jsonify({
             "ok": False,
-            "error": "Mídia não encontrada"
+            "error": str(erro),
+            "tipo": type(erro).__name__
         }), 404
 
 
-@app.route("/")
+@app.route("/", methods=["GET"])
 def home():
     return jsonify({
         "message": "Olá! API está funcionando!",
@@ -116,4 +168,21 @@ def home():
             "/enviarMedia",
             "/viewMedias/<nome>"
         ]
-    })
+    }), 200
+
+
+@app.errorhandler(413)
+def arquivo_grande(_erro):
+    return jsonify({
+        "ok": False,
+        "error": "Arquivo excede o limite de 50 MB"
+    }), 413
+
+
+@app.errorhandler(500)
+def erro_interno(_erro):
+    return jsonify({
+        "ok": False,
+        "error": "Erro interno da API"
+    }), 500
+    
