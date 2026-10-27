@@ -1,9 +1,7 @@
-from flask import Flask, request, jsonify, Response
+from flask import Flask, request, jsonify, redirect
 from werkzeug.utils import secure_filename
 from vercel.blob import sync as blob
 from pathlib import Path
-from urllib.request import urlopen
-from urllib.error import HTTPError, URLError
 import mimetypes
 import traceback
 import uuid
@@ -16,9 +14,8 @@ app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
 
 def erro_json(mensagem, erro, status=500):
     app.logger.error(
-        "%s: %s\n%s",
+        "%s:\n%s",
         mensagem,
-        erro,
         traceback.format_exc()
     )
 
@@ -27,6 +24,19 @@ def erro_json(mensagem, erro, status=500):
         "error": str(erro),
         "tipo": type(erro).__name__
     }), status
+
+
+@app.route("/", methods=["GET"])
+def home():
+    return jsonify({
+        "message": "Olá! API está funcionando!",
+        "status": 200,
+        "params": [
+            "/enviarMedia",
+            "/viewMedias",
+            "/viewMedias/<nome>"
+        ]
+    }), 200
 
 
 @app.route("/enviarMedia", methods=["POST"])
@@ -120,53 +130,21 @@ def viewMedia(nome):
 
     try:
         resultado = blob.head_blob(caminho)
-        url_blob = resultado.url
 
-        with urlopen(url_blob, timeout=20) as resposta:
-            conteudo = resposta.read()
-            tipo = resposta.headers.get(
-                "Content-Type",
-                mimetypes.guess_type(nome_seguro)[0]
-                or "application/octet-stream"
-            )
-
-        response = Response(conteudo, status=200)
-        response.headers["Content-Type"] = tipo
-        response.headers["Content-Disposition"] = (
-            f'inline; filename="{nome_seguro}"'
-        )
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["Cache-Control"] = "public, max-age=3600"
-
-        return response
-
-    except HTTPError as erro:
-        if erro.code == 404:
-            return jsonify({
-                "ok": False,
-                "error": "Mídia não encontrada"
-            }), 404
-
-        return erro_json("Erro HTTP ao buscar mídia no Blob", erro, 502)
-
-    except (URLError, TimeoutError) as erro:
-        return erro_json("Falha ao acessar a URL da mídia", erro, 502)
+        return redirect(resultado.url, code=302)
 
     except Exception as erro:
-        return erro_json("Falha ao exibir mídia", erro)
+        app.logger.error(
+            "Falha ao localizar mídia %s:\n%s",
+            nome_seguro,
+            traceback.format_exc()
+        )
 
-
-@app.route("/", methods=["GET"])
-def home():
-    return jsonify({
-        "message": "Olá! API está funcionando!",
-        "status": 200,
-        "params": [
-            "/viewMedias",
-            "/enviarMedia",
-            "/viewMedias/<nome>"
-        ]
-    }), 200
+        return jsonify({
+            "ok": False,
+            "error": "Mídia não encontrada",
+            "tipo": type(erro).__name__
+        }), 404
 
 
 @app.errorhandler(413)
