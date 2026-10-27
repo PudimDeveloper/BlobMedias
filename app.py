@@ -126,10 +126,8 @@ def viewMedia(nome):
             "error": "Nome inválido"
         }), 400
 
-    caminho = f"{PREFIXO}{nome_seguro}"
-
     try:
-        resultado = blob.head_blob(caminho)
+        resultado = blob.head_blob(f"{PREFIXO}{nome_seguro}")
 
         return redirect(resultado.url, code=302)
 
@@ -161,3 +159,7 @@ def erro_interno(_erro):
         "ok": False,
         "error": "Erro interno da API"
     }), 500
+
+
+if __name__ == "__main__":
+    app.run()
