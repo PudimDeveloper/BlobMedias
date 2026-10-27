@@ -48,4 +48,13 @@ def viewMedias():
 def viewMedia(nome):
     return send_from_directory(PASTA, nome)
 
+@app.route("/")
+def home():
+    return {
+        "message": "Olá! Api está funcionando!",
+        "status": 200,
+        "params": [
+            "/viewMedias", "enviarMedia"
+        ]
+    }
 
