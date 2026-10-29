@@ -6,8 +6,10 @@ import mimetypes
 import traceback
 import uuid
 import os
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 
 PREFIXO = "medias/"
 BASE_URL = os.getenv(
