@@ -289,7 +289,6 @@ def listar_medias():
 
             arquivos.append({
                 "nome": nome,
-                "url": f"{BASE_URL}/viewMedias/{nome}",
                 "blobUrl": item.url
             })
 
