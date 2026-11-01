@@ -11,7 +11,7 @@ from vercel.blob import sync as blob
 app = Flask(__name__)
 
 PREFIXO = "medias/"
-Key = os.environ.get("MEDIA_KEY", "")
+key = os.environ.get("MEDIA_KEY", "")
 
 
 @app.route("/enviarMedia", methods=["POST"])
@@ -94,7 +94,7 @@ def listar_medias():
 def visualizar_media(nome):
     chave = request.args.get("key", "")
 
-    if not Key or not hmac.compare_digest(chave, Key):
+    if not key or not hmac.compare_digest(chave, Key):
         return jsonify({
             "erro": "Key incorreta."
         }), 403
