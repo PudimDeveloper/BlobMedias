@@ -4,6 +4,8 @@ import mimetypes
 import uuid
 
 from pathlib import Path
+from urllib.parse import quote
+
 from flask import Flask, request, jsonify, redirect
 from werkzeug.utils import secure_filename
 from vercel.blob import sync as blob
@@ -55,10 +57,11 @@ def enviar_media():
         }), 201
 
     except Exception as erro:
-        print("Erro ao enviar mídia:", erro)
+        app.logger.exception("Erro ao enviar mídia")
 
         return jsonify({
-            "erro": "Não foi possível enviar a mídia."
+            "erro": "Não foi possível enviar a mídia.",
+            "detalhes": str(erro)
         }), 500
 
 
@@ -74,7 +77,7 @@ def listar_medias():
 
             medias.append({
                 "nome": nome,
-                "url": f"/viewMedias/{nome}?key={key}"
+                "url": f"/viewMedias/{quote(nome)}"
             })
 
         return jsonify({
@@ -83,10 +86,11 @@ def listar_medias():
         })
 
     except Exception as erro:
-        print("Erro ao listar mídias:", erro)
+        app.logger.exception("Erro ao listar mídias")
 
         return jsonify({
-            "erro": "Não foi possível listar as mídias."
+            "erro": "Não foi possível listar as mídias.",
+            "detalhes": str(erro)
         }), 500
 
 
@@ -117,11 +121,20 @@ def visualizar_media(nome):
         return redirect(resultado.url)
 
     except Exception as erro:
-        print("Erro ao visualizar mídia:", erro)
+        app.logger.exception("Erro ao visualizar mídia")
 
         return jsonify({
-            "erro": "Não foi possível visualizar a mídia."
+            "erro": "Não foi possível visualizar a mídia.",
+            "detalhes": str(erro)
         }), 500
+
+
+@app.route("/", methods=["GET"])
+def inicio():
+    return jsonify({
+        "servico": "Blob Medias",
+        "status": "online"
+    })
 
 
 if __name__ == "__main__":
