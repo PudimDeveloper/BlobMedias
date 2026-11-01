@@ -16,20 +16,34 @@ PREFIXO = "medias/"
 key = os.environ.get("MEDIA_KEY", "")
 
 
+@app.route("/", methods=["GET"])
+def inicio():
+    return jsonify({
+        "servico": "Blob Medias",
+        "status": "online"
+    })
+
+
 @app.route("/enviarMedia", methods=["POST"])
 def enviar_media():
     if "file" not in request.files:
-        return jsonify({"erro": "Nenhum arquivo enviado."}), 400
+        return jsonify({
+            "erro": "Nenhum arquivo enviado."
+        }), 400
 
     arquivo = request.files["file"]
 
     if not arquivo.filename:
-        return jsonify({"erro": "Nome do arquivo inválido."}), 400
+        return jsonify({
+            "erro": "Nome do arquivo inválido."
+        }), 400
 
     nome = secure_filename(arquivo.filename)
 
     if not nome:
-        return jsonify({"erro": "Nome do arquivo inválido."}), 400
+        return jsonify({
+            "erro": "Nome do arquivo inválido."
+        }), 400
 
     extensao = Path(nome).suffix
     nome_final = f"{uuid.uuid4().hex}{extensao}"
@@ -68,11 +82,9 @@ def enviar_media():
 @app.route("/viewMedias", methods=["GET"])
 def listar_medias():
     try:
-        resultado = blob.query_blobs(prefix=PREFIXO)
-
         medias = []
 
-        for item in resultado.blobs:
+        for item in blob.query_blobs(prefix=PREFIXO):
             nome = item.pathname.removeprefix(PREFIXO)
 
             medias.append({
@@ -127,14 +139,6 @@ def visualizar_media(nome):
             "erro": "Não foi possível visualizar a mídia.",
             "detalhes": str(erro)
         }), 500
-
-
-@app.route("/", methods=["GET"])
-def inicio():
-    return jsonify({
-        "servico": "Blob Medias",
-        "status": "online"
-    })
 
 
 if __name__ == "__main__":
