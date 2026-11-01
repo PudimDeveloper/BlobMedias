@@ -94,7 +94,7 @@ def listar_medias():
 def visualizar_media(nome):
     chave = request.args.get("key", "")
 
-    if not key or not hmac.compare_digest(chave, Key):
+    if not key or not hmac.compare_digest(chave, key):
         return jsonify({
             "erro": "Key incorreta."
         }), 403
