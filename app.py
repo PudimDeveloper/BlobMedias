@@ -74,7 +74,7 @@ def listar_medias():
 
             medias.append({
                 "nome": nome,
-                "url": f"/viewMedias/{nome}"
+                "url": f"/viewMedias/{nome}?key={key}"
             })
 
         return jsonify({
