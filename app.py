@@ -1,7 +1,7 @@
 import os
 import hmac
 import mimetypes
-import inspect
+import uuid
 
 from flask import Flask, request, jsonify, redirect
 from werkzeug.utils import secure_filename
@@ -56,20 +56,21 @@ def enviar_media():
             or "application/octet-stream"
         )
 
-        nome = nome_original
+        extensao = os.path.splitext(nome_original)[1]
+        nome = f"{uuid.uuid4().hex}{extensao}"
         caminho = f"{PREFIXO}{nome}"
 
-        # Exibe a assinatura instalada para facilitar o diagnóstico.
-        print("put_blob:", inspect.signature(blob.put_blob))
-
-        # A chamada usa somente os dois argumentos aceitos
-        # pela assinatura indicada no erro recebido.
-        resultado = blob.put_blob(caminho, conteudo)
+        resultado = blob.put_blob(
+            caminho,
+            conteudo,
+            access="public",
+            content_type=mimetype
+        )
 
         return jsonify({
             "sucesso": True,
             "nome": nome,
-            "url": resultado.url if hasattr(resultado, "url") else None,
+            "url": resultado.url,
             "mimetype": mimetype
         }), 200
 
@@ -98,7 +99,7 @@ def listar_medias():
         return jsonify({
             "total": len(medias),
             "medias": medias
-        })
+        }), 200
 
     except Exception as erro:
         print("Erro ao listar mídias:", repr(erro))
