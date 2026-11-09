@@ -1,11 +1,21 @@
+
 import os
 import hmac
 import mimetypes
 import uuid
+import requests
 
-from flask import Flask, request, jsonify, redirect
+from flask import (
+    Flask,
+    request,
+    jsonify,
+    Response,
+    stream_with_context
+)
+
 from werkzeug.utils import secure_filename
 from vercel.blob import sync as blob
+
 
 app = Flask(__name__)
 
@@ -51,8 +61,8 @@ def enviar_media():
             }), 400
 
         mimetype = (
-            arquivo.mimetype
-            or mimetypes.guess_type(nome_original)[0]
+            mimetypes.guess_type(nome_original)[0]
+            or arquivo.mimetype
             or "application/octet-stream"
         )
 
@@ -112,6 +122,8 @@ def listar_medias():
 
 @app.route("/viewMedias/<path:nome>", methods=["GET"])
 def visualizar_media(nome):
+    origem = None
+
     try:
         chave = request.args.get("key", "")
 
@@ -128,6 +140,7 @@ def visualizar_media(nome):
             }), 400
 
         caminho = f"{PREFIXO}{nome}"
+
         resultado = blob.head_blob(caminho)
 
         if not resultado:
@@ -135,9 +148,51 @@ def visualizar_media(nome):
                 "erro": "Mídia não encontrada."
             }), 404
 
-        return redirect(resultado.url)
+        mimetype = (
+            mimetypes.guess_type(nome)[0]
+            or "application/octet-stream"
+        )
+
+        origem = requests.get(
+            resultado.url,
+            stream=True,
+            timeout=30
+        )
+
+        if origem.status_code != 200:
+            origem.close()
+
+            return jsonify({
+                "erro": "Falha ao obter mídia."
+            }), 502
+
+        def gerar():
+            try:
+                for chunk in origem.iter_content(
+                    chunk_size=64 * 1024
+                ):
+                    if chunk:
+                        yield chunk
+            finally:
+                origem.close()
+
+        resposta = Response(
+            stream_with_context(gerar()),
+            content_type=mimetype
+        )
+
+        resposta.headers["Content-Disposition"] = (
+            f'inline; filename="{nome}"'
+        )
+
+        resposta.headers["X-Content-Type-Options"] = "nosniff"
+
+        return resposta
 
     except Exception as erro:
+        if origem:
+            origem.close()
+
         print("Erro ao visualizar mídia:", repr(erro))
 
         return jsonify({
@@ -148,4 +203,8 @@ def visualizar_media(nome):
 
 if __name__ == "__main__":
     porta = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=porta)
+
+    app.run(
+        host="0.0.0.0",
+        port=porta
+    )
