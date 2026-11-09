@@ -1,4 +1,3 @@
 Flask
-Werkzeug
-vercel-blob
-Flask-Cors
+requests
+vercel
