@@ -60,11 +60,7 @@ def enviar_media():
                 "erro": "O arquivo está vazio."
             }), 400
 
-        mimetype = (
-            mimetypes.guess_type(nome_original)[0]
-            or arquivo.mimetype
-            or "application/octet-stream"
-        )
+        mimetype = mimetypes.guess_type(nome_original)[0] or arquivo.mimetype
 
         extensao = os.path.splitext(nome_original)[1]
         nome = f"{uuid.uuid4().hex}{extensao}"
@@ -150,7 +146,6 @@ def visualizar_media(nome):
 
         mimetype = (
             mimetypes.guess_type(nome)[0]
-            or "application/octet-stream"
         )
 
         origem = requests.get(
